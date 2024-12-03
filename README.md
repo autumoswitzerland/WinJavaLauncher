@@ -1,7 +1,7 @@
 
 # WinJavaLauncher - Wrapper Application Build and Packaging for Windows
 
-This repository provides a build system to create a wrapper application for a jpackaged app. The wrapper application launches the jpackaged executable and includes all necessary resources, such as app files, icons, and runtime libraries.
+This repository provides a build system to create a wrapper application for a jpackaged app. The wrapper application launches the jpackaged executable and includes all necessary resources, such as app files, icons, and runtime libraries. If you compile the wrapper application, you only receive a single executable and portable file for a packaged Java application, which temporarily creates the app and runtime directory in the same location at runtime and deletes them again after execution.
 
 ## Overview
 
