@@ -19,7 +19,7 @@ This repository provides a build system for creating a wrapper application that 
 
 This system simplifies the process of distributing Java applications as standalone executables while ensuring all dependencies are included in the wrapper.
 
-## Overview
+## Detailed Description
 
 The project uses a `make.sh` to automate the process of building and packaging the wrapper application. It integrates various resources (such as the executable, runtime dependencies, and icons) into a resource file (`src/resources.rc`), which is used by the wrapper application.
 
