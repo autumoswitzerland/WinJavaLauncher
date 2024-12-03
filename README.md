@@ -49,6 +49,8 @@ Alternatively, you can modify the `make.sh` directly to set the executable name.
         ├── runtime.zip
         └── your-app.exe
 
+    Read [Wrapper Application Resource Preparation](app/README.md) for detailed instructions.
+
 2. **Run the Build Script**: Once the resources are in place, run the `make.sh` to build the wrapper application:
    ```bash
    ./Makefile.sh
