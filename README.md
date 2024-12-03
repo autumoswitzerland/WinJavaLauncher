@@ -1,7 +1,23 @@
 
 # WinJavaLauncher - Wrapper Application Build and Packaging for Windows
 
-This repository provides a build system to create a wrapper application for a jpackaged app. The wrapper application launches the jpackaged executable and includes all necessary resources, such as app files, icons, and runtime libraries. If you build the wrapper application with `make.sh` script, you only receive a single executable and portable file for a packaged Java application, which temporarily creates the app and runtime directory in the same location at runtime and deletes them again after execution.
+This repository provides a build system for creating a wrapper application that packages and launches a Java application, which has been jpackaged. The wrapper application is designed to launch the jpackaged executable and includes all the necessary resources, such as application files, icons, and runtime libraries.
+
+## Key Features:
+- **Single Executable**: The `make.sh` script compiles and links all the required components to produce a single executable file. This file is portable and can be used to launch the jpackaged Java application.
+- **Temporary Runtime Directory**: At runtime, the wrapper application creates a temporary directory at the execution location containing the Java application and its runtime libraries. Once the application finishes execution, the wrapper deletes this directory, ensuring no residual files are left behind.
+
+## Build Process:
+1. **Compilation**: The `make.sh` script compiles the C/C++ source files, including the Miniz compression library and resources.
+2. **Linking**: The wrapper executable is linked with the compiled object files and resources to produce the final standalone executable.
+3. **Portability**: The resulting executable can be moved and executed on other systems without requiring additional setup.
+
+## Usage:
+- **Build**: Run the `make.sh` script to compile and link the application.
+- **Run**: The generated executable will launch the jpackaged Java application with all necessary resources.
+- **Clean**: Optionally, the `make.sh` script can be used with the `clean` argument to delete the build directory and any temporary files generated during the build process.
+
+This system simplifies the process of distributing Java applications as standalone executables while ensuring all dependencies are included in the wrapper.
 
 ## Overview
 
