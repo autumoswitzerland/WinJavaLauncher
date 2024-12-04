@@ -325,8 +325,18 @@ int main() {
             return 1;
         }
     } else {
-        // Create the directory for the extraction
-        std::string runDir = "run";
+        // get jpackage executable
+        std::string exeFile = getExecutable();
+
+    	// Create the directory for the extraction ->
+        // Remove extension from the executable name (assuming .exe extension)
+        std::string runDir = exeFile.substr(0, exeFile.find_last_of("."));
+        // Replace invalid characters in the directory name with underscores
+		for (auto& ch : runDir) {
+			if (!std::isalnum(ch) && ch != '-' && ch != '_') {
+				ch = '_';
+			}
+		}
 
         // Create the directory if it doesn't exist (for disk extraction)
         if (!fs::exists(runDir)) {
@@ -341,9 +351,6 @@ int main() {
             DEBUG_LOG("Run directory created: " + runDir);
         }
 
-        // get jpackage executable
-        std::string exeFile = getExecutable();
-
         // Empty buffer for file extraction
         std::vector<char> emptyBuf;
 
@@ -354,6 +361,9 @@ int main() {
 
         unzipFile(runDir + "\\app.zip", runDir);
         unzipFile(runDir + "\\runtime.zip", runDir);
+
+        deleteFilesAndDirectories(runDir + "\\app.zip", "");
+        deleteFilesAndDirectories(runDir + "\\runtime.zip", "");
 
         STARTUPINFO si = {0};
         si.cb = sizeof(si);
@@ -383,11 +393,8 @@ int main() {
             printErrorInfo("Failed to launch " + exeFile + ". Error Code: " + std::to_string(GetLastError()));
         }
 
-        // Cleanup: Delete zip files and extracted directories with logging
-        DEBUG_LOG("Deleting zip files and directories...");
-
-        deleteFilesAndDirectories(runDir + "\\app.zip", runDir + "\\app");
-        deleteFilesAndDirectories(runDir + "\\runtime.zip", runDir + "\\runtime");
+        // Cleanup: Delete temporary directory
+        DEBUG_LOG("Deleting temporary directory...");
 
         // Delete the "run" directory
         deleteFilesAndDirectories("", runDir);
