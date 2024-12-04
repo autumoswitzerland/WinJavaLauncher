@@ -37,8 +37,11 @@
 #include <windows.h>
 
 
-// Define jpackaged Windows application
-IDS_EXECUTABLE "your-app.exe"
+// Define jpackaged Windows application as a string resource
+STRINGTABLE
+BEGIN
+    IDS_EXECUTABLE "your-app.exe"
+END
 
 // Define mandatory resources
 IDR_APP_ICON ICON "app/icon.ico"
