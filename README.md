@@ -69,7 +69,7 @@ Alternatively, you can modify the `make.sh` directly to set the executable name.
 
 2. **Run the Build Script**: Once the resources are in place, run the `make.sh` to build the wrapper application:
    ```bash
-   ./Makefile.sh
+   ./make.sh
    ```
 
 3. **Check the Output**: The wrapper executable will be created using the name defined in the `WRAPPER_APP_EXE` variable. The executable will include all the necessary resources and be ready to launch your jpackaged application.
