@@ -100,7 +100,7 @@ WinJavaLauncher/
 │   ├── runtime.zip      # JRE runtime archive
 │   └── icon.ico         # App icon
 │   └── your-app.exe     # Your jpackaged Windows app
-├── makefile.sh          # Build script
+├── make.sh              # Build script
 ├── README.md            # Documentation
 └── LICENSE.md           # License file
 ```
