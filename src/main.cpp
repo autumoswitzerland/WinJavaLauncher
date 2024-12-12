@@ -9,8 +9,8 @@
  * other file system operations.
  *
  * @author 2024 autumo Ltd. Switzerland, Michael Gasche
- * @date 2024-12-02
- * @version 1.0
+ * @date 2024-12-12
+ * @version 1.1
  *
  * @license MIT License
  *
@@ -47,15 +47,18 @@
 namespace fs = std::filesystem;
 
 
+// Global debug control
+constexpr bool DEBUG_MODE = false;
+
+// Switch for determining the resource extraction location
+constexpr bool USE_TEMP_DIRECTORY = true;
+
 // In-memory execution; it is not implemented!
 // true to enable in-memory execution, false to disable
 constexpr bool IN_MEMORY_EXECUTION = false;
 
-// Global debug control
-constexpr bool DEBUG_MODE = false;
-
-// File buffer size
-constexpr size_t FILENAME_BUFFER_SIZE = 256;
+// Define a list of unsafe file name characters to remove or replace
+const std::string unsafeChars = R"([\/:*?"<>|])";
 
 // Debug macro
 #define DEBUG_LOG(message) if (DEBUG_MODE) std::cout << "[DEBUG]: " << message << std::endl;
@@ -83,32 +86,29 @@ void printErrorInfo(const std::string& message) {
  * @param extractDir Path to the directory to delete.
  */
 void deleteFilesAndDirectories(const std::string& zipPath, const std::string& extractDir) {
-    // Delete the zip file if it exists
-    if (!zipPath.empty() && fs::exists(zipPath)) {
-        try {
-            if (!fs::remove(zipPath)) {
-                printErrorInfo("Failed to delete zip file: " + zipPath);
-            } else {
-                DEBUG_LOG("Deleted zip file: " + zipPath);
-            }
-        } catch (const fs::filesystem_error& e) {
-            printErrorInfo("Error deleting zip file: " + std::string(e.what()));
-        }
-    }
-
-    // Delete the extracted directory if it exists
-    if (!extractDir.empty() && fs::exists(extractDir)) {
-        try {
-            // Attempt to remove all contents of the directory
-            std::uintmax_t removedCount = fs::remove_all(extractDir);
-            if (removedCount == 0) {
-                printErrorInfo("Failed to delete extracted directory: " + extractDir);
-            } else {
-                DEBUG_LOG("Deleted directory and its contents: " + extractDir);
-            }
-        } catch (const fs::filesystem_error& e) {
-            printErrorInfo("Error deleting extracted directory: " + std::string(e.what()));
-        }
+    try {
+		// Delete the zip file if it exists
+		if (!zipPath.empty() && fs::exists(zipPath)) {
+			if (fs::remove(zipPath)) {
+				DEBUG_LOG("Deleted zip file: " + zipPath);
+			} else {
+				throw std::runtime_error("Failed to delete zip file: " + zipPath);
+			}
+		}
+		// Delete the extracted directory if it exists
+		if (!extractDir.empty() && fs::exists(extractDir)) {
+			// Attempt to remove all contents of the directory
+			std::uintmax_t removedCount = fs::remove_all(extractDir);
+			if (removedCount == 0) {
+				throw std::runtime_error("Failed to delete extracted directory: " + extractDir);
+			} else {
+				DEBUG_LOG("Deleted directory and its contents: " + extractDir);
+			}
+		}
+    } catch (const fs::filesystem_error& e) {
+        printErrorInfo("Error deleting files and/or directories: " + std::string(e.what()));
+    } catch (const std::exception& e) {
+        printErrorInfo("Error: " + std::string(e.what()));
     }
 }
 
@@ -124,71 +124,74 @@ void deleteFilesAndDirectories(const std::string& zipPath, const std::string& ex
  * @param outputPath Path to the file where the resource will be saved (optional).
  */
 void extractResource(UINT resourceID, std::vector<char>& resourceBuffer, const std::string& outputPath) {
-    DEBUG_LOG("Starting resource extraction. Resource ID: " + std::to_string(resourceID));
+	try {
+		DEBUG_LOG("Starting resource extraction. Resource ID: " + std::to_string(resourceID));
 
-    // Get the current module handle (the executable itself)
-    HMODULE hModule = GetModuleHandle(NULL);
-    if (hModule == NULL) {
-        printErrorInfo("Failed to get module handle!");
-        return;
+		// Get the current module handle (the executable itself)
+		HMODULE hModule = GetModuleHandle(NULL);
+		if (hModule == NULL) {
+			printErrorInfo("Failed to get module handle!");
+			return;
+		}
+		DEBUG_LOG("Module handle obtained.");
+
+		HRSRC hResInfo = FindResource(hModule, MAKEINTRESOURCE(resourceID), RT_RCDATA);
+		if (hResInfo == NULL) {
+			printErrorInfo("Resource not found!");
+			return;
+		}
+		DEBUG_LOG("Resource found.");
+
+		DWORD dwSize = SizeofResource(hModule, hResInfo);
+		if (dwSize == 0) {
+			printErrorInfo("Resource size is 0!");
+			return;
+		}
+		DEBUG_LOG("Resource size determined.");
+
+		HGLOBAL hResData = LoadResource(hModule, hResInfo);
+		if (hResData == NULL) {
+			printErrorInfo("Failed to load resource!");
+			return;
+		}
+		DEBUG_LOG("Resource loaded successfully.");
+
+		// Lock the resource and get the pointer to the data
+		const void* pData = LockResource(hResData);
+		if (pData == NULL) {
+			printErrorInfo("Failed to lock resource!");
+			return;
+		}
+		DEBUG_LOG("Resource locked into memory.");
+
+		if (IN_MEMORY_EXECUTION) {
+			// In-memory extraction: Store resource data in a buffer (do not write to disk)
+			resourceBuffer.assign(reinterpret_cast<const char*>(pData), reinterpret_cast<const char*>(pData) + dwSize);
+			//data.assign((char*)pData, (char*)pData + dwSize);
+			DEBUG_LOG("Resource loaded into memory. Size: " + std::to_string(dwSize));
+		} else {
+			// Write the resource data (zip or executable) to disk if output path is specified
+			if (outputPath.empty()) {
+				throw std::invalid_argument("No output path specified for disk extraction.");
+			}
+
+			std::ofstream outFile(outputPath, std::ios::binary);
+			if (!outFile.is_open()) {
+				throw std::runtime_error("Failed to open output file for writing.");
+			}
+
+			outFile.write(reinterpret_cast<const char*>(pData), dwSize);
+			if (outFile.fail()) {
+				throw std::runtime_error("Failed to write resource to file!");
+			} else {
+				DEBUG_LOG("Resource extracted to " + outputPath);
+			}
+			outFile.close();
+		}
+		DEBUG_LOG("Resource extraction completed.");
+    } catch (const std::exception& e) {
+        printErrorInfo("Error extracting resource: " + std::string(e.what()));
     }
-    DEBUG_LOG("Module handle obtained.");
-
-    HRSRC hResInfo = FindResource(hModule, MAKEINTRESOURCE(resourceID), RT_RCDATA);
-    if (hResInfo == NULL) {
-        printErrorInfo("Resource not found!");
-        return;
-    }
-    DEBUG_LOG("Resource found.");
-
-    DWORD dwSize = SizeofResource(hModule, hResInfo);
-    if (dwSize == 0) {
-        printErrorInfo("Resource size is 0!");
-        return;
-    }
-    DEBUG_LOG("Resource size determined.");
-
-    HGLOBAL hResData = LoadResource(hModule, hResInfo);
-    if (hResData == NULL) {
-        printErrorInfo("Failed to load resource!");
-        return;
-    }
-    DEBUG_LOG("Resource loaded successfully.");
-
-    // Lock the resource and get the pointer to the data
-    const void* pData = LockResource(hResData);
-    if (pData == NULL) {
-        printErrorInfo("Failed to lock resource!");
-        return;
-    }
-    DEBUG_LOG("Resource locked into memory.");
-
-    if (IN_MEMORY_EXECUTION) {
-        // In-memory extraction: Store resource data in a buffer (do not write to disk)
-        resourceBuffer.assign(reinterpret_cast<const char*>(pData), reinterpret_cast<const char*>(pData) + dwSize);
-        //data.assign((char*)pData, (char*)pData + dwSize);
-        DEBUG_LOG("Resource loaded into memory. Size: " + std::to_string(dwSize));
-    } else {
-        // Write the resource data (zip or executable) to disk if output path is specified
-        if (!outputPath.empty()) {
-            std::ofstream outFile(outputPath, std::ios::binary);
-            if (outFile.is_open()) {
-                outFile.write(reinterpret_cast<const char*>(pData), dwSize);
-                if (outFile.fail()) {
-                    printErrorInfo("Failed to write resource to file!");
-                } else {
-                    DEBUG_LOG("Resource extracted to " + outputPath);
-                }
-                outFile.close();
-            } else {
-                printErrorInfo("Failed to open output file for writing.");
-            }
-        } else {
-            printErrorInfo("No output path specified for disk extraction.");
-        }
-    }
-
-    DEBUG_LOG("Resource extraction completed.");
 }
 
 /**
@@ -203,62 +206,50 @@ void extractResource(UINT resourceID, std::vector<char>& resourceBuffer, const s
 void unzipFile(const std::string& zipPath, const std::string& extractDir) {
     mz_zip_archive zip;
     memset(&zip, 0, sizeof(zip));
-
-    // Open the zip file
-    if (!mz_zip_reader_init_file(&zip, zipPath.c_str(), 0)) {
-        printErrorInfo("Error opening zip file: " + zipPath);
-        return;
-    }
-
-    // Get the number of files in the zip archive
-    int num_files = mz_zip_reader_get_num_files(&zip);
-    for (int i = 0; i < num_files; ++i) {
-        // Get filename of the file in the zip archive
-        char filename[FILENAME_BUFFER_SIZE];
-        if (!mz_zip_reader_get_filename(&zip, i, filename, sizeof(filename))) {
-            printErrorInfo("Error getting filename from zip: " + zipPath);
-            continue;
-        }
-
-        fs::path filePath = fs::path(extractDir) / filename;
-
-        // Check if it's a directory or file
-        // Create directories first if necessary
-        if (filename[strlen(filename) - 1] == '\\' || filename[strlen(filename) - 1] == '/') {
-            // It's a directory, create it if it doesn't exist
-            if (!fs::create_directories(filePath)) {
-                printErrorInfo("Error creating directory: " + filePath.string());
-            } else {
-                DEBUG_LOG("Directory created: " + filePath.string());
-            }
-        } else {
-            // It's a file, extract it
-            if (!mz_zip_reader_extract_to_file(&zip, i, filePath.string().c_str(), 0)) {
-                printErrorInfo("Error extracting file: " + filePath.string());
-                mz_zip_reader_end(&zip);
-                return;
-            } else {
-                DEBUG_LOG("Extracted: " + filePath.string());
-            }
-        }
-    }
-
-    mz_zip_reader_end(&zip);
-
-    if (num_files == 0) {
-        printErrorInfo("No files found in the zip archive: " + zipPath);
-    } else {
-        DEBUG_LOG("Unzip operation completed for: " + zipPath);
-    }
-
-    // Remove the zip file after extraction
     try {
-        if (fs::exists(zipPath)) {
-            fs::remove(zipPath);
-            DEBUG_LOG("Zip file removed: " + zipPath);
-        }
+		// Open the zip file
+		if (!mz_zip_reader_init_file(&zip, zipPath.c_str(), 0)) {
+			throw std::runtime_error("Error opening zip file: " + zipPath);
+		}
+
+		// Get the number of files in the zip archive
+		int num_files = mz_zip_reader_get_num_files(&zip);
+		if (num_files == 0) {
+			throw std::runtime_error("No files found in the zip archive: " + zipPath);
+		}
+
+		for (int i = 0; i < num_files; ++i) {
+			char filename[512];  // Adjust size as needed
+			mz_uint filenameBufSize = sizeof(filename);
+			if (!mz_zip_reader_get_filename(&zip, i, filename, filenameBufSize)) {
+				throw std::runtime_error("Error getting filename from zip: " + zipPath);
+			}
+			std::string filenameStr(filename);
+			fs::path filePath = fs::path(extractDir) / filename;
+			if (filenameStr.back() == '\\' || filenameStr.back() == '/') {
+				if (!fs::create_directories(filePath)) {
+					throw std::runtime_error("Error creating directory: " + filePath.string());
+				}
+				DEBUG_LOG("Directory created: " + filePath.string());
+			} else {
+				if (!mz_zip_reader_extract_to_file(&zip, i, filePath.string().c_str(), 0)) {
+					throw std::runtime_error("Error extracting file: " + filePath.string());
+				}
+				DEBUG_LOG("Extracted: " + filePath.string());
+			}
+		}
+
+		mz_zip_reader_end(&zip);
+		DEBUG_LOG("Unzip operation completed for: " + zipPath);
+		// Remove the zip file after extraction
+		if (fs::exists(zipPath)) {
+			fs::remove(zipPath);
+			DEBUG_LOG("Zip file removed: " + zipPath);
+		}
     } catch (const fs::filesystem_error& e) {
-        printErrorInfo("Error removing zip file: " + zipPath + " - " + e.what());
+        printErrorInfo("File system error: " + std::string(e.what()));
+    } catch (const std::exception& e) {
+        printErrorInfo("Error during unzip operation: " + std::string(e.what()));
     }
 }
 
@@ -283,7 +274,8 @@ bool executeFromMemory(const std::vector<char>& exeData, const std::vector<char>
  * @brief Retrieves the executable name from resources.
  *
  * This function uses Windows resource management to load a string resource
- * that contains the name of the executable to be launched.
+ * that contains the name of the executable to be launched. The resource ID
+ * (IDS_EXECUTABLE) must be defined in the application resources.
  *
  * @return The name of the executable as a string.
  */
@@ -291,11 +283,123 @@ std::string getExecutable() {
     // Get the current module handle
     HMODULE hModule = GetModuleHandle(NULL);
     char buffer[MAX_PATH];
-
     // Load the resource string
-    LoadStringA(hModule, IDS_EXECUTABLE, buffer, MAX_PATH);
-
+    if (!LoadStringA(hModule, IDS_EXECUTABLE, buffer, MAX_PATH)) {
+        printErrorInfo("Failed to load executable name resource!");
+    }
     return std::string(buffer);
+}
+
+/**
+ * @brief Retrieves the system's temporary directory.
+ *
+ * This function uses the Windows API (GetTempPath) to retrieve the path of
+ * the system's temporary directory. It handles errors by throwing a runtime
+ * exception if the temporary directory cannot be retrieved.
+ *
+ * @return The temporary directory path as a string.
+ * @throws std::runtime_error if the temporary directory cannot be retrieved.
+ */
+std::string getTempDirectory() {
+    // Use the OS temporary directory on Windows
+    char tempPath[MAX_PATH];
+    if (GetTempPath(MAX_PATH, tempPath)) {
+        return std::string(tempPath);
+    } else {
+    	printErrorInfo("Failed to get temporary directory.");
+        throw std::runtime_error("Failed to get temporary directory.");
+    }
+}
+
+/**
+ * @brief Sanitizes a directory or file name by replacing invalid characters.
+ *
+ * This function sanitizes a string by replacing any character that is not
+ * alphanumeric, hyphen, or underscore with an underscore ('_'). This is useful
+ * for creating valid filenames or directory names on the filesystem.
+ *
+ * @param name The original name to be sanitized.
+ * @return A sanitized version of the input name.
+ */
+std::string sanitizeFileName(const std::string& name) {
+	std::string sanitizedName = name;
+	// Replace unsafe characters with underscores
+	for (char& ch : sanitizedName) {
+		if (unsafeChars.find(ch) != std::string::npos) {
+			ch = '_';  // Replace unsafe characters with '_'
+		}
+	}
+    // Trim any leading or trailing whitespace
+    sanitizedName.erase(0, sanitizedName.find_first_not_of(" \t\n\r\f\v"));
+    sanitizedName.erase(sanitizedName.find_last_not_of(" \t\n\r\f\v") + 1);
+    // Ensure the name is not empty after sanitization
+    if (sanitizedName.empty()) {
+        sanitizedName = "default_name";  // Provide a default name if empty
+    }
+    return sanitizedName;
+}
+
+/**
+ * @brief Retrieves the run directory path for extraction or execution.
+ *
+ * This function calculates the directory where the executable's resources
+ * will be extracted. If the `USE_TEMP_DIRECTORY` flag is set, it returns
+ * a temporary directory. Otherwise, it returns the directory containing
+ * the executable file (minus the file extension), ensuring that any invalid
+ * characters in the path are sanitized.
+ *
+ * @param exeFile The full path of the executable file.
+ * @return The full path of the directory where the executable's resources
+ *         will be extracted or executed from.
+ */
+std::string getRunDirectory(const std::string& exeFile) {
+
+	// Use fs::path for better path handling
+	fs::path exePath(exeFile);
+
+	// Remove the extension and get the base name
+	fs::path baseName = exePath.stem();  // 'stem' removes the file extension
+	std::string sanitizedBaseName = sanitizeFileName(baseName.string());
+	DEBUG_LOG("Sanitized directory: " + sanitizedBaseName);
+
+    // Determine the parent directory
+    fs::path parentPath;
+    try {
+		if (USE_TEMP_DIRECTORY) {
+			// Use the system temp directory
+			parentPath = getTempDirectory();
+			// Fallback if temp directory acquisition fails
+			if (parentPath.empty()) {
+				printErrorInfo("Temp directory acquisition failed, falling back to executable directory.");
+				// Parent directory of the executable
+				parentPath = exePath.parent_path();
+			}
+		} else {
+			// Fallback to the current location of the executable
+			parentPath = exePath.parent_path();
+		}
+    } catch (const std::exception& e) {
+    	printErrorInfo("Exception caught while acquiring temp directory: " + std::string(e.what()));
+        // Fall back to the executable directory if temp directory acquisition fails
+		parentPath = exePath.parent_path();
+    }
+    // Combine the parent path with the sanitized directory name
+    fs::path runDir = parentPath / sanitizedBaseName;  // Safer and platform-independent path construction
+
+    // Create the directory if it doesn't exist (for disk extraction)
+    if (!fs::exists(runDir)) {
+        try {
+            if (!fs::create_directory(runDir)) {
+                throw std::runtime_error("Failed to create directory: " + runDir.string());
+            }
+        } catch (const std::exception& e) {
+        	printErrorInfo("Exception during directory creation: " + std::string(e.what()) + " Path: " + runDir.string());
+			throw std::runtime_error("Failed to create directory: " + runDir.string());
+		}
+        DEBUG_LOG("Run directory created: " + runDir.string());
+    }
+
+    return runDir.string();
 }
 
 /**
@@ -303,6 +407,10 @@ std::string getExecutable() {
  *
  * The `main` function handles the initialization, resource extraction, and
  * process execution. It also manages fallback behavior for in-memory execution.
+ *
+ * If the `IN_MEMORY_EXECUTION` flag is set, resources are extracted directly
+ * into memory and executed. If not, the resources are extracted to a temporary
+ * directory, and the executable is launched from there.
  *
  * @return 0 if successful, 1 otherwise.
  */
@@ -327,29 +435,9 @@ int main() {
     } else {
         // get jpackage executable
         std::string exeFile = getExecutable();
-
     	// Create the directory for the extraction ->
         // Remove extension from the executable name (assuming .exe extension)
-        std::string runDir = exeFile.substr(0, exeFile.find_last_of("."));
-        // Replace invalid characters in the directory name with underscores
-		for (auto& ch : runDir) {
-			if (!std::isalnum(ch) && ch != '-' && ch != '_') {
-				ch = '_';
-			}
-		}
-
-        // Create the directory if it doesn't exist (for disk extraction)
-        if (!fs::exists(runDir)) {
-            try {
-                if (!fs::create_directory(runDir)) {
-                    throw std::runtime_error("Failed to create directory: " + runDir);
-                }
-            } catch (const std::exception& e) {
-                printErrorInfo(e.what());
-                return 1;  // Exit the program if directory creation fails
-            }
-            DEBUG_LOG("Run directory created: " + runDir);
-        }
+        std::string runDir = getRunDirectory(exeFile);
 
         // Empty buffer for file extraction
         std::vector<char> emptyBuf;
@@ -359,11 +447,9 @@ int main() {
         extractResource(IDR_RUNTIME_CONTENTS, emptyBuf, runDir + "\\runtime.zip");
         extractResource(IDR_APP_EXECUTABLE, emptyBuf, runDir + "\\" + exeFile);
 
+        // Unzip ZIPs; they are automatically deleted after extraction
         unzipFile(runDir + "\\app.zip", runDir);
         unzipFile(runDir + "\\runtime.zip", runDir);
-
-        deleteFilesAndDirectories(runDir + "\\app.zip", "");
-        deleteFilesAndDirectories(runDir + "\\runtime.zip", "");
 
         STARTUPINFO si = {0};
         si.cb = sizeof(si);
