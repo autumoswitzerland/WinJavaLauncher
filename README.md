@@ -78,7 +78,7 @@ Alternatively, you can modify the `make.sh` directly to set the executable name.
 
 You can customize the build process by modifying the `make.sh`:
 - Set the `WRAPPER_APP_EXE` variable to change the name of the output executable.
-- Modify the `src/resources.rc` file to include additional resources if needed.
+- Modify the `src/resources.rc` file to name your resources.
 
 ## Directory Structure
 
