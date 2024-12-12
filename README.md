@@ -5,7 +5,7 @@ This repository provides a build system for creating a wrapper application that 
 
 ### Key Features:
 - **Single Executable**: The `make.sh` script compiles and links all the required components to produce a single executable file. This file is portable and can be used to launch the jpackaged Java application.
-- **Temporary Runtime Directory**: At runtime, the wrapper application creates a temporary directory at the execution location containing the Java application and its runtime libraries. Once the application finishes execution, the wrapper deletes this directory, ensuring no residual files are left behind.
+- **Temporary Runtime Directory**: At runtime, the wrapper application creates a temporary directory in the user's default temporary directory that contains the Java application and its runtime libraries. As soon as the application is executed, the wrapper deletes this directory to ensure that no residual files are left behind.
 
 ### Build Process:
 1. **Compilation**: The `make.sh` script compiles the C/C++ source files, including the Miniz compression library and resources.
